@@ -1,0 +1,39 @@
+{
+  "name": "backend",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc",
+    "lint": "eslint .",
+    "bootstrap": "cdk bootstrap --toolkit-stack-name PdfPromptBootstrap --qualifier pdfprompt",
+    "deploy": "cdk deploy"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@middy/input-output-logger": "4.6.5",
+    "@types/aws-lambda": "8.10.125",
+    "aws-cdk": "2.104.0",
+    "aws-cdk-lib": "2.104.0",
+    "constructs": "10.3.0",
+    "esbuild": "0.19.5"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "3.441.0",
+    "@aws-sdk/client-s3": "3.441.0",
+    "@aws-sdk/lib-dynamodb": "3.441.0",
+    "@aws-sdk/s3-presigned-post": "3.441.0",
+    "@middy/core": "4.6.5",
+    "@middy/http-cors": "4.6.5",
+    "@middy/http-error-handler": "4.6.5",
+    "@middy/http-header-normalizer": "4.6.5",
+    "@middy/http-json-body-parser": "4.6.5",
+    "@middy/http-response-serializer": "4.6.5",
+    "@middy/util": "4.6.5",
+    "@middy/validator": "4.6.5",
+    "http-errors-enhanced": "1.1.2",
+    "type-fest": "0.20.2",
+    "ulidx": "2.2.1",
+    "valibot": "0.20.1"
+  }
+}
