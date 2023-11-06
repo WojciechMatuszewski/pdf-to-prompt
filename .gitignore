@@ -157,3 +157,5 @@ sketch
 # End of https://www.toptal.com/developers/gitignore/api/node,react
 
 cdk.out
+
+playground

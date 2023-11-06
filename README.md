@@ -34,6 +34,8 @@ WIP
 
     - Supplying the examples manually is called **"hard prompting"**. There is also a way for the AI to generate this prompt. If that is the case, then it is called **"soft prompting"**.
 
+    - Since adding additional benefit to the user prompt is quite large, you probably do not want to pass the user input "as is" into the LLM. You most likely want to use **a prompt template** augmented with the user input.
+
 - **R**etrieval **A**ugmented **G**eneration means **adding additional set of data into the LLM "knowledge base"**. [Here is a great video about this topic](https://www.youtube.com/watch?v=T-D1OfcDW1M).
 
   - A good example would be asking the LLM about the planet with the highest amount of moons. **The data LLM has might be outdated** as such it might give you wrong answer. Now, if you **augment** the data LLM has with sources from, let us say NASA, the LLM would be able to give a correct answer.
@@ -42,9 +44,17 @@ WIP
 
 - In the context of AI, the **word embeddings** are representation of words as array of numbers called **vectors**.
 
+  - You might think of embeddings as "classifications". The modal will classify some word to a given number.
+
   - The numbers in the vector represent how similar each word is to another word. For example, the vector for _"I took my cat for a walk_" would be similar in terms of numbers to the _"I took my dog for a walk"_.
 
   - The **embeddings are then feed into some kind of _similarity search_ engine** which LLM use to retrieve the final answer.
+
+- The Amazon Bedrock exposes various models. One of them has an _"embedding" modality_ while others have _"text" modality_. What is the difference?
+
+  - The **_"text" modality_** means
+
+  - The **_"embedding" modality_** means
 
 - TODO
 
