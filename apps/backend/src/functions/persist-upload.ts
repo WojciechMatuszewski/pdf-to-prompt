@@ -44,7 +44,7 @@ export const handler = middy<EventBridgeEvent<"_", unknown>>()
           sk: `FILE#${id}`,
           key: objectKey,
           name,
-          status: "PENDING",
+          status: "PENDING_EMBEDDINGS",
         },
       })
     );

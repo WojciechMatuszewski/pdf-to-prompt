@@ -3,6 +3,7 @@ import { PdfPromptStack } from "./aws/stack.js";
 import { IConstruct } from "constructs";
 
 const app = new cdk.App();
+
 const stack = new PdfPromptStack(app, "PdfPromptStack", {
   synthesizer: new cdk.DefaultStackSynthesizer({
     qualifier: "pdfprompt",

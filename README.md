@@ -56,6 +56,18 @@ WIP
 
   - The **_"embedding" modality_** means
 
+- The **name _LangChain_ comes from the fact that, to work with LLMs, one creates "chains" of inputs**.
+
+  - The simplest would be the following: _input variables_ -> _prompt template_ -> _prompt_ -> _model_
+
+    - In this example, we are "hard prompting" because it is up to us to craft the _prompt template_.
+
+- Since we are bound by the input token limit, some libraries (like LangChain) opt to recursively provide prompts by splitting the context into multiple documents.
+
+  - So far, the way I've seen RAG implemented was by providing the relevant context into the LLM prompt. What if the relevant context is very large? Would not asking the AI for the answer cost a lot of money (since we are billed by input/output tokens)?
+
+    - It seems like the answer is to **split the context into small chunks, rank them and retrieve only the top "k" results**. This way we keep the context relatively small. While this might help, it still seems off to me. [This blog post](https://bea.stollnitz.com/blog/rag/) describes the filtering & ranking processes as well as the general idea behind RAG.
+
 - TODO
 
   - https://js.langchain.com/docs/integrations/vectorstores/faiss

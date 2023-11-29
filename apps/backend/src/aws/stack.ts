@@ -19,6 +19,7 @@ export class PdfPromptStack extends cdk.Stack {
         type: cdk.aws_dynamodb.AttributeType.STRING,
       },
       billingMode: cdk.aws_dynamodb.BillingMode.PAY_PER_REQUEST,
+      stream: cdk.aws_dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
     });
 
     const pdfBucket = new cdk.aws_s3.Bucket(this, "PdfBucket", {
@@ -76,6 +77,41 @@ export class PdfPromptStack extends cdk.Stack {
         }),
       ],
     });
+
+    const generateEmbeddingsFunction = new cdk.aws_lambda_nodejs.NodejsFunction(
+      this,
+      "GenerateEmbeddings",
+      {
+        handler: "handler",
+        entry: path.join(__dirname, "../functions/generate-embeddings.ts"),
+        bundling: {
+          format: cdk.aws_lambda_nodejs.OutputFormat.ESM,
+          mainFields: ["module", "main"],
+          esbuildArgs: {
+            "--conditions": "module",
+          },
+        },
+        environment: {},
+      }
+    );
+    // pdfDataTable.grantStreamRead(generateEmbeddingsFunction);
+    generateEmbeddingsFunction.addEventSource(
+      new cdk.aws_lambda_event_sources.DynamoEventSource(pdfDataTable, {
+        startingPosition: cdk.aws_lambda.StartingPosition.LATEST,
+        filters: [
+          cdk.aws_lambda.FilterCriteria.filter({
+            eventName: cdk.aws_lambda.FilterRule.isEqual("INSERT"),
+            dynamodb: {
+              NewImage: {
+                status: {
+                  S: cdk.aws_lambda.FilterRule.isEqual("PENDING_EMBEDDINGS"),
+                },
+              },
+            },
+          }),
+        ],
+      })
+    );
 
     const generateUploadLinkFunction = new cdk.aws_lambda_nodejs.NodejsFunction(
       this,

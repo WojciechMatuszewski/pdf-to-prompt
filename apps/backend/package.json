@@ -5,6 +5,7 @@
     "typecheck": "tsc",
     "lint": "eslint .",
     "bootstrap": "cdk bootstrap --toolkit-stack-name PdfPromptBootstrap --qualifier pdfprompt",
+    "synth": "cdk synth",
     "deploy": "cdk deploy"
   },
   "keywords": [],
