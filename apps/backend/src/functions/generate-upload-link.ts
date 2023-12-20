@@ -1,25 +1,15 @@
-import middy, { MiddlewareObj } from "@middy/core";
+import { S3Client } from "@aws-sdk/client-s3";
+import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
+import middy from "@middy/core";
 import httpCors from "@middy/http-cors";
 import httpErrorHandler from "@middy/http-error-handler";
 import httpHeaderNormalizer from "@middy/http-header-normalizer";
-import jsonBodyParser from "@middy/http-json-body-parser";
 import httpResponseSerializer from "@middy/http-response-serializer";
 import inputOutputLogger from "@middy/input-output-logger";
 import { createError } from "@middy/util";
-import {
-  Input,
-  ObjectEntries,
-  ObjectSchema,
-  number,
-  object,
-  record,
-  safeParseAsync,
-  string,
-} from "valibot";
-import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
-import { S3Client } from "@aws-sdk/client-s3";
+import { APIGatewayProxyEvent } from "aws-lambda";
 import { ulid } from "ulidx";
-import { APIGatewayEvent } from "aws-lambda";
+import { Input, number, object, record, safeParseAsync, string } from "valibot";
 
 const RequestSchema = object({ name: string(), size: number() });
 
@@ -28,55 +18,11 @@ const ResponseSchema = object({
   fields: record(string()),
 });
 
-export const jsonBodyValidator = <
-  RequestBodyFields extends ObjectEntries,
-  ResponseBodyFields extends ObjectEntries,
->({
-  requestBodySchema,
-  responseBodySchema,
-}: {
-  requestBodySchema: ObjectSchema<RequestBodyFields>;
-  responseBodySchema: ObjectSchema<ResponseBodyFields>;
-}): MiddlewareObj<
-  { body: Input<ObjectSchema<RequestBodyFields>> },
-  { body: unknown }
-> => {
-  return {
-    before: async (request) => {
-      const parseResult = await safeParseAsync(
-        requestBodySchema,
-        request.event.body
-      );
-
-      if (!parseResult.success) {
-        throw createError(403, JSON.stringify({ message: "Invalid payload" }), {
-          cause: parseResult.issues,
-        });
-      }
-    },
-    after: async (output) => {
-      const parseResult = await safeParseAsync(
-        responseBodySchema,
-        output.response?.body
-      );
-
-      if (!parseResult.success) {
-        throw createError(
-          500,
-          JSON.stringify({ message: "Malformed response" }),
-          { expose: true, cause: parseResult.issues }
-        );
-      }
-    },
-  };
-};
-
 const s3Client = new S3Client({});
 
-export const handler = middy<APIGatewayEvent>()
+export const handler = middy<APIGatewayProxyEvent>()
   .use(httpHeaderNormalizer())
   .use(inputOutputLogger())
-  .use(jsonBodyParser())
   .use(
     httpResponseSerializer({
       defaultContentType: "application/json",
@@ -97,12 +43,6 @@ export const handler = middy<APIGatewayEvent>()
       ],
     })
   )
-  .use(
-    jsonBodyValidator({
-      requestBodySchema: RequestSchema,
-      responseBodySchema: ResponseSchema,
-    })
-  )
   .use(httpErrorHandler())
   .use(
     httpCors({
@@ -113,10 +53,21 @@ export const handler = middy<APIGatewayEvent>()
     })
   )
   .handler(async (request) => {
-    const body: Input<typeof RequestSchema> = request.body;
+    const parseBodyResult = await safeParseAsync(
+      RequestSchema,
+      JSON.parse(request.body ?? `{}`)
+    );
+    if (!parseBodyResult.success) {
+      throw createError(400, "Malformed Payload", {
+        expose: true,
+        cause: parseBodyResult.issues,
+      });
+    }
+
+    const { size, name } = parseBodyResult.output;
 
     const id = ulid();
-    const key = `${id}/${body.name}`;
+    const key = `${id}/data/file.pdf`;
     const bucketName = process.env.PDF_BUCKET_NAME!;
 
     const { url, fields } = await createPresignedPost(s3Client, {
@@ -125,9 +76,14 @@ export const handler = middy<APIGatewayEvent>()
       Conditions: [
         { bucket: bucketName },
         ["starts-with", "$key", id],
-        ["content-length-range", body.size, body.size],
+        ["content-length-range", size, size],
       ],
       Expires: 600,
+      Fields: {
+        "x-amz-meta-name": name,
+        "x-amz-meta-size_bytes": `${size}`,
+        "x-amz-meta-id": id,
+      },
     });
 
     const response: Input<typeof ResponseSchema> = {

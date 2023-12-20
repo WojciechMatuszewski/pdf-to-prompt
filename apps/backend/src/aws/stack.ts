@@ -58,6 +58,7 @@ export class PdfPromptStack extends cdk.Stack {
       }
     );
     pdfDataTable.grantWriteData(persistUploadFunction);
+    pdfBucket.grantRead(persistUploadFunction);
     new cdk.aws_events.Rule(this, "PdfBucketPdfUploaded", {
       eventPattern: {
         source: ["aws.s3"],
@@ -67,7 +68,7 @@ export class PdfPromptStack extends cdk.Stack {
             name: [pdfBucket.bucketName],
           },
           object: {
-            key: [{ suffix: ".pdf" }],
+            key: [{ wildcard: "*/data/*.pdf" }],
           },
         },
       },
@@ -90,11 +91,19 @@ export class PdfPromptStack extends cdk.Stack {
           esbuildArgs: {
             "--conditions": "module",
           },
+          banner: `// BANNER START
+          const require = (await import("node:module")).createRequire(import.meta.url);
+          // BANNER END`,
         },
-        environment: {},
+
+        memorySize: 1024,
+        timeout: cdk.Duration.seconds(10),
+        environment: {
+          PDF_BUCKET_NAME: pdfBucket.bucketName,
+        },
       }
     );
-    // pdfDataTable.grantStreamRead(generateEmbeddingsFunction);
+    pdfBucket.grantReadWrite(generateEmbeddingsFunction);
     generateEmbeddingsFunction.addEventSource(
       new cdk.aws_lambda_event_sources.DynamoEventSource(pdfDataTable, {
         startingPosition: cdk.aws_lambda.StartingPosition.LATEST,
@@ -110,6 +119,9 @@ export class PdfPromptStack extends cdk.Stack {
             },
           }),
         ],
+        retryAttempts: 0,
+        reportBatchItemFailures: false,
+        bisectBatchOnError: false,
       })
     );
 

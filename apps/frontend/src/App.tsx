@@ -96,24 +96,8 @@ const FileList = ({
 }: {
   locallyUploadedItems: UploadedItem[];
 }) => {
-  const { isLoading, isError, data } = useListUploadedFiles();
-
-  if (isError) {
-    return <p>Error!</p>;
-  }
-
-  if (isLoading) {
-    return <p>Loading...</p>;
-  }
-
-  const hasLocallyUploadedItems = locallyUploadedItems.length > 0;
-  const hasPersistedItems = data.items.length > 0;
-
-  const hasItems = hasLocallyUploadedItems || hasPersistedItems;
-
   return (
     <>
-      {!hasItems ? <p>No files uploaded</p> : null}
       <ul className={"flex flex-col gap-4 mt-4"}>
         {locallyUploadedItems.map((uploadedItem) => {
           return (
@@ -126,13 +110,17 @@ const FileList = ({
   );
 };
 
-const PersistedFileItem = ({ uploadedItem }: { uploadedItem: any }) => {
-  return <div>works</div>;
-};
+const uploadedItems = new Set<string>();
 
 const LocalFileItem = ({ uploadedItem }: { uploadedItem: UploadedItem }) => {
-  const { file } = uploadedItem;
-  const { mutate: uploadItem, isPending } = useUploadItem();
+  const {
+    mutateAsync: uploadItem,
+    isPending,
+    error,
+    data,
+    status,
+  } = useUploadFile();
+  console.log({ isPending, error, data, status });
 
   /**
    * This hook uploads the file twice. (due to strict mode).
@@ -140,14 +128,26 @@ const LocalFileItem = ({ uploadedItem }: { uploadedItem: UploadedItem }) => {
    * Deduplication?
    */
   useLayoutEffect(() => {
-    uploadItem(file);
-  }, []);
+    /**
+     * Adding the code to prevent this being invoked twice breaks the `isPending` status.
+     * Interesting...
+     */
+    if (uploadedItems.has(uploadedItem.id)) {
+      return;
+    }
+
+    console.log("uploading!");
+    void uploadItem(uploadedItem.file).then(() => {
+      console.log("mutation resolved");
+    });
+    uploadedItems.add(uploadedItem.id);
+  }, [uploadItem, uploadedItem.file, uploadedItem.id]);
 
   return (
     <li className={"p-4 bg-base-300 rounded-md border-2 border-neutral"}>
       <div className={"flex flex-row gap-2"}>
         <File />
-        <span className={"italic"}>{file.name}</span>
+        <span className={"italic"}>{uploadedItem.file.name}</span>
         {isPending ? (
           <span className={"ml-auto loading loading-dots loading-sm"}></span>
         ) : null}
@@ -156,28 +156,12 @@ const LocalFileItem = ({ uploadedItem }: { uploadedItem: UploadedItem }) => {
   );
 };
 
-const useListUploadedFiles = () => {
-  return useQuery({
-    queryFn: async () => {
-      const url = new URL("list-uploaded-files", import.meta.env.VITE_API_URL);
-      const response = await fetch(url.toString());
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-
-      const result = await response.json();
-      return result;
-    },
-    queryKey: ["uploaded-files"],
-  });
-};
-
 const GetUploadUrlResponse = object({
   url: string(),
   fields: record(string()),
 });
 
-const useUploadItem = () => {
+const useUploadFile = () => {
   return useMutation({
     mutationFn: async (file: File) => {
       const url = new URL("generate-upload-link", import.meta.env.VITE_API_URL);
@@ -195,6 +179,7 @@ const useUploadItem = () => {
         GetUploadUrlResponse,
         await presignedUrlResponse.json()
       );
+      console.log("Payload okay");
 
       const formData = new FormData();
       Object.entries(presignedUrlPayload.fields).forEach(([field, value]) => {
@@ -209,32 +194,10 @@ const useUploadItem = () => {
       if (!uploadResponse.ok) {
         throw new Error(await uploadResponse.text());
       }
-      if (!uploadResponse.body) {
-        return;
-      }
 
-      console.log("starting!");
+      console.log(uploadResponse);
 
-      let receivedBytes = 0;
-      const targetBytes = parseFloat(
-        uploadResponse.headers.get("Content-Length") ?? "0"
-      );
-
-      const reader = uploadResponse.body.getReader();
-      while (true) {
-        const { done, value } = await reader.read();
-        console.log({ done, value });
-        if (done) {
-          return;
-        }
-
-        receivedBytes += value.length;
-        console.log(
-          `received ${receivedBytes} from ${targetBytes} (${Math.floor(
-            (targetBytes / receivedBytes) * 100
-          )}%)`
-        );
-      }
+      return {};
     },
   });
 };

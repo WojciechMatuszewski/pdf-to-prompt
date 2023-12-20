@@ -68,8 +68,12 @@ WIP
 
     - It seems like the answer is to **split the context into small chunks, rank them and retrieve only the top "k" results**. This way we keep the context relatively small. While this might help, it still seems off to me. [This blog post](https://bea.stollnitz.com/blog/rag/) describes the filtering & ranking processes as well as the general idea behind RAG.
 
-- TODO
+- The Bedrock model for embeddings does not seem to support streaming. When trying to use the `InvokeModelWithResponseStreamCommand` I got the following response
 
-  - https://js.langchain.com/docs/integrations/vectorstores/faiss
+  > ValidationException: The model is unsupported for streaming
 
-  - Local version to play around with the concept
+  I guess the closest we can get to streaming [is the _batch inference_ job](https://docs.aws.amazon.com/bedrock/latest/userguide/batch-inference.html).
+
+- **You can add metadata to the S3 presigned URL via the `Fields` property**.
+
+  - This is super handy for adding more information regarding the file. The consumer can then use `headObject` to retrieve it.

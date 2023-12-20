@@ -4,11 +4,7 @@ import { IConstruct } from "constructs";
 
 const app = new cdk.App();
 
-const stack = new PdfPromptStack(app, "PdfPromptStack", {
-  synthesizer: new cdk.DefaultStackSynthesizer({
-    qualifier: "pdfprompt",
-  }),
-});
+const stack = new PdfPromptStack(app, "PdfPromptStack", {});
 
 class AddRemovalPolicyToEveryResource implements cdk.IAspect {
   public visit(node: IConstruct): void {

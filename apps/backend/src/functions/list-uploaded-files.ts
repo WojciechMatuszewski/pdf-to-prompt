@@ -3,19 +3,19 @@ import httpErrorHandler from "@middy/http-error-handler";
 import inputOutputLogger from "@middy/input-output-logger";
 import { APIGatewayProxyEvent } from "aws-lambda";
 
-import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import httpCors from "@middy/http-cors";
+import httpResponseSerializer from "@middy/http-response-serializer";
+import { createError } from "@middy/util";
 import {
-  Input,
+  array,
   literal,
   object,
-  parseAsync,
+  safeParseAsync,
   startsWith,
   string,
 } from "valibot";
-import { createError } from "@middy/util";
-import httpResponseSerializer from "@middy/http-response-serializer";
-import httpCors from "@middy/http-cors";
 
 const ddbClient = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 
@@ -26,6 +26,8 @@ const ItemSchema = object({
   name: string(),
   status: string(),
 });
+
+const ItemsSchema = array(ItemSchema);
 
 export const handler = middy<APIGatewayProxyEvent>()
   .use(inputOutputLogger())
@@ -74,36 +76,15 @@ export const handler = middy<APIGatewayProxyEvent>()
         },
       })
     );
-    const validatedItems = await Promise.allSettled(
-      Items.map((item) => parseAsync(ItemSchema, item))
-    );
-
-    const groupedItems = validatedItems.reduce(
-      (acc, item) => {
-        if (item.status === "rejected") {
-          acc.validationErrors.push(item.reason);
-        }
-
-        if (item.status === "fulfilled") {
-          acc.items.push(item.value);
-        }
-
-        return acc;
-      },
-      {
-        validationErrors: [],
-        items: [],
-      } as { validationErrors: unknown[]; items: Input<typeof ItemSchema>[] }
-    );
-    const { validationErrors, items } = groupedItems;
-    if (validationErrors.length > 0) {
-      throw createError(500, "Contains malformed items", {
+    const parseItemsResult = await safeParseAsync(ItemsSchema, Items);
+    if (!parseItemsResult.success) {
+      throw createError(500, "Malformed data", {
         expose: true,
-        cause: validationErrors,
+        cause: parseItemsResult.issues,
       });
     }
 
-    const normalizedItems = items.map((rawItem) => {
+    const normalizedItems = parseItemsResult.output.map((rawItem) => {
       const id = rawItem.sk.replace("FILE#", "");
       return {
         name: rawItem.name,
