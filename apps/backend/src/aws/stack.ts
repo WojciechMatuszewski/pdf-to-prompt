@@ -91,9 +91,12 @@ export class PdfPromptStack extends cdk.Stack {
           esbuildArgs: {
             "--conditions": "module",
           },
-          banner: `// BANNER START
-          const require = (await import("node:module")).createRequire(import.meta.url);
-          // BANNER END`,
+          loader: {
+            ".node": "file",
+          },
+          // banner: `// BANNER START
+          // const require = (await import("node:module")).createRequire(import.meta.url);
+          // // BANNER END`,
         },
 
         memorySize: 1024,

@@ -77,3 +77,17 @@ WIP
 - **You can add metadata to the S3 presigned URL via the `Fields` property**.
 
   - This is super handy for adding more information regarding the file. The consumer can then use `headObject` to retrieve it.
+
+- Extracting text from PDF in ESM land is quite hard.
+
+  - There are various libraries, but they are incompatible with ESM. The main problem are dynamic `require` calls.
+
+  - There is the `pdf-dist` package, which mostly works.
+
+    1. It requires you have `node-gyp` working which in most cases does not work and you have to install or reinstall some packages.
+
+    2. I had to use "side-effect" import for the worker.
+
+  - Of course, one could use the AWS Textract.
+
+    1. The sync command does not work well for larger files. If the file is bigger than X, it rejects with an error saying that the "format of the file is incompatible" which is not the case.
