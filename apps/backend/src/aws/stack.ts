@@ -2,6 +2,7 @@ import * as cdk from "aws-cdk-lib";
 import { Construct } from "constructs";
 import path from "node:path";
 import url from "node:url";
+import fs from "node:fs";
 
 const __dirname = url.fileURLToPath(new URL(".", import.meta.url));
 
@@ -79,13 +80,42 @@ export class PdfPromptStack extends cdk.Stack {
       ],
     });
 
+    const faissNodeLayer = new cdk.aws_lambda.LayerVersion(
+      this,
+      "FaissNodeLayer",
+      {
+        code: cdk.aws_lambda.Code.fromAsset(
+          path.join(__dirname, "../layers/faiss-node")
+        ),
+        compatibleArchitectures: [cdk.aws_lambda.Architecture.ARM_64],
+        compatibleRuntimes: [cdk.aws_lambda.Runtime.NODEJS_LATEST],
+      }
+    );
     const generateEmbeddingsFunction = new cdk.aws_lambda_nodejs.NodejsFunction(
       this,
       "GenerateEmbeddings",
       {
         handler: "handler",
         entry: path.join(__dirname, "../functions/generate-embeddings.ts"),
+        layers: [faissNodeLayer],
         bundling: {
+          commandHooks: {
+            afterBundling: (inputDir, outputDir) => {
+              console.log({ inputDir, outputDir });
+              console.log(
+                `cp ${inputDir}/apps/backend/package.json ${outputDir}`
+              );
+              return [
+                `cp ${inputDir}/apps/backend/package.json ${outputDir}/package.json`,
+              ];
+            },
+            beforeInstall: () => {
+              return [];
+            },
+            beforeBundling: () => {
+              return [];
+            },
+          },
           format: cdk.aws_lambda_nodejs.OutputFormat.ESM,
           mainFields: ["module", "main"],
           esbuildArgs: {
@@ -94,9 +124,8 @@ export class PdfPromptStack extends cdk.Stack {
           loader: {
             ".node": "file",
           },
-          // banner: `// BANNER START
-          // const require = (await import("node:module")).createRequire(import.meta.url);
-          // // BANNER END`,
+
+          banner: `const require = (await import("node:module")).Module.createRequire(import.meta.url); const __filename = (await import("node:url")).fileURLToPath(import.meta.url);`,
         },
 
         memorySize: 1024,
@@ -107,6 +136,14 @@ export class PdfPromptStack extends cdk.Stack {
       }
     );
     pdfBucket.grantReadWrite(generateEmbeddingsFunction);
+    generateEmbeddingsFunction.addToRolePolicy(
+      new cdk.aws_iam.PolicyStatement({
+        effect: cdk.aws_iam.Effect.ALLOW,
+        actions: ["bedrock:InvokeModel"],
+        resources: ["*"],
+      })
+    );
+
     generateEmbeddingsFunction.addEventSource(
       new cdk.aws_lambda_event_sources.DynamoEventSource(pdfDataTable, {
         startingPosition: cdk.aws_lambda.StartingPosition.LATEST,

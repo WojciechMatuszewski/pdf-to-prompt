@@ -91,3 +91,51 @@ WIP
   - Of course, one could use the AWS Textract.
 
     1. The sync command does not work well for larger files. If the file is bigger than X, it rejects with an error saying that the "format of the file is incompatible" which is not the case.
+
+- **If you see the `dynamic require of XX is not supported` error**, try creating the `require` variable before your code runs.
+
+  - This error has to do with something about ESM.
+
+  - In `esbuild` you can add this banner
+
+    ```text
+    banner: "import { createRequire } from 'module';const require = createRequire(import.meta.url);",
+    ```
+
+- In some cases, **when AWS Lambda runtime fails to parse the error**, you will get the following message.
+
+  ```json
+  {
+    "errorType": "handled",
+    "errorMessage": "callback called with Error argument, but there was a problem while retrieving one or more of its message, name, and stack"
+  }
+  ```
+
+  I hit this error while creating a _vector store_ via the `faiss-node` library.
+
+  ```ts
+  const vectorStore = await FaissStore.fromDocuments(
+    await loader.load(),
+    embeddings
+  );
+  ```
+
+  For some reason, AWS Lambda runtime **could not parse the error and print it**. **Using `console.log(error)` caused this weird runtime message to appear instead of the original error!**
+
+  ```ts
+  try {
+    const vectorStore = await FaissStore.fromDocuments(
+      await loader.load(),
+      embeddings
+    );
+  } catch (error) {
+    if (error instanceof Error) {
+      console.log(error.name);
+      console.log(error.message);
+
+      console.log(error.stack); // <-- This line cases the weird runtime error
+    }
+  }
+  ```
+
+  **Printing the `stack` caused the weird runtime error to show up**. I wonder if this is some kind of security mechanism?
