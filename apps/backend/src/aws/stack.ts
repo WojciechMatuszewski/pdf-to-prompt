@@ -2,7 +2,6 @@ import * as cdk from "aws-cdk-lib";
 import { Construct } from "constructs";
 import path from "node:path";
 import url from "node:url";
-import fs from "node:fs";
 
 const __dirname = url.fileURLToPath(new URL(".", import.meta.url));
 
@@ -87,10 +86,13 @@ export class PdfPromptStack extends cdk.Stack {
         code: cdk.aws_lambda.Code.fromAsset(
           path.join(__dirname, "../layers/faiss-node")
         ),
-        compatibleArchitectures: [cdk.aws_lambda.Architecture.ARM_64],
+        compatibleArchitectures: [cdk.aws_lambda.Architecture.X86_64],
         compatibleRuntimes: [cdk.aws_lambda.Runtime.NODEJS_LATEST],
       }
     );
+    /**
+     * TODO: not possible to have onSuccess here since this function is invoked by DynamoDB
+     */
     const generateEmbeddingsFunction = new cdk.aws_lambda_nodejs.NodejsFunction(
       this,
       "GenerateEmbeddings",
@@ -99,35 +101,20 @@ export class PdfPromptStack extends cdk.Stack {
         entry: path.join(__dirname, "../functions/generate-embeddings.ts"),
         layers: [faissNodeLayer],
         bundling: {
-          commandHooks: {
-            afterBundling: (inputDir, outputDir) => {
-              console.log({ inputDir, outputDir });
-              console.log(
-                `cp ${inputDir}/apps/backend/package.json ${outputDir}`
-              );
-              return [
-                `cp ${inputDir}/apps/backend/package.json ${outputDir}/package.json`,
-              ];
-            },
-            beforeInstall: () => {
-              return [];
-            },
-            beforeBundling: () => {
-              return [];
-            },
-          },
           format: cdk.aws_lambda_nodejs.OutputFormat.ESM,
           mainFields: ["module", "main"],
+          externalModules: ["faiss-node"],
           esbuildArgs: {
             "--conditions": "module",
           },
           loader: {
+            /**
+             * esbuild does not know what to do with `.node` files.
+             */
             ".node": "file",
           },
-
           banner: `const require = (await import("node:module")).Module.createRequire(import.meta.url); const __filename = (await import("node:url")).fileURLToPath(import.meta.url);`,
         },
-
         memorySize: 1024,
         timeout: cdk.Duration.seconds(10),
         environment: {
@@ -164,6 +151,46 @@ export class PdfPromptStack extends cdk.Stack {
         bisectBatchOnError: false,
       })
     );
+
+    const persistEmbeddingsFunction = new cdk.aws_lambda_nodejs.NodejsFunction(
+      this,
+      "PersistEmbeddings",
+      {
+        handler: "handler",
+        entry: path.join(__dirname, "../functions/persist-embeddings.ts"),
+        bundling: {
+          format: cdk.aws_lambda_nodejs.OutputFormat.ESM,
+          mainFields: ["module", "main"],
+          esbuildArgs: {
+            "--conditions": "module",
+          },
+        },
+        environment: {
+          PDF_DATA_TABLE_NAME: pdfDataTable.tableName,
+        },
+      }
+    );
+    pdfDataTable.grantWriteData(persistEmbeddingsFunction);
+
+    new cdk.aws_events.Rule(this, "PdfBucketEmbeddingsUploaded", {
+      eventPattern: {
+        source: ["aws.s3"],
+        detailType: ["Object Created"],
+        detail: {
+          bucket: {
+            name: [pdfBucket.bucketName],
+          },
+          object: {
+            key: [{ wildcard: "*/vector/faiss.index" }],
+          },
+        },
+      },
+      targets: [
+        new cdk.aws_events_targets.LambdaFunction(persistEmbeddingsFunction, {
+          retryAttempts: 0,
+        }),
+      ],
+    });
 
     const generateUploadLinkFunction = new cdk.aws_lambda_nodejs.NodejsFunction(
       this,
@@ -205,6 +232,40 @@ export class PdfPromptStack extends cdk.Stack {
     );
     pdfDataTable.grantReadData(listUploadsFunction);
 
+    const chatWithDocumentFunction = new cdk.aws_lambda_nodejs.NodejsFunction(
+      this,
+      "ChatWithDocument",
+      {
+        handler: "handler",
+        entry: path.join(__dirname, "../functions/chat-with-document.ts"),
+        layers: [faissNodeLayer],
+        bundling: {
+          format: cdk.aws_lambda_nodejs.OutputFormat.ESM,
+          mainFields: ["module", "main"],
+          esbuildArgs: {
+            "--conditions": "module",
+          },
+          externalModules: ["faiss-node"],
+          banner: `const require = (await import("node:module")).Module.createRequire(import.meta.url); const __filename = (await import("node:url")).fileURLToPath(import.meta.url);`,
+        },
+        environment: {
+          PDF_DATA_TABLE_NAME: pdfDataTable.tableName,
+          PDF_BUCKET_NAME: pdfBucket.bucketName,
+        },
+        memorySize: 1024,
+        timeout: cdk.Duration.seconds(15),
+      }
+    );
+    pdfDataTable.grantReadData(chatWithDocumentFunction);
+    pdfBucket.grantRead(chatWithDocumentFunction);
+    chatWithDocumentFunction.addToRolePolicy(
+      new cdk.aws_iam.PolicyStatement({
+        effect: cdk.aws_iam.Effect.ALLOW,
+        actions: ["bedrock:InvokeModel"],
+        resources: ["*"],
+      })
+    );
+
     const api = new cdk.aws_apigateway.RestApi(this, "PdfPromptApi", {
       defaultCorsPreflightOptions: {
         allowOrigins: cdk.aws_apigateway.Cors.ALL_ORIGINS,
@@ -223,6 +284,14 @@ export class PdfPromptStack extends cdk.Stack {
       .addMethod(
         "GET",
         new cdk.aws_apigateway.LambdaIntegration(listUploadsFunction)
+      );
+
+    api.root
+      .addResource("{id}")
+      .addResource("chat")
+      .addMethod(
+        "POST",
+        new cdk.aws_apigateway.LambdaIntegration(chatWithDocumentFunction)
       );
   }
 }

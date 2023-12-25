@@ -139,3 +139,5 @@ WIP
   ```
 
   **Printing the `stack` caused the weird runtime error to show up**. I wonder if this is some kind of security mechanism?
+
+- I just spent a couple of hours debugging issue with `faiss-node` AWS Lambda Layer only to discover I used the layer for wrong architecture...

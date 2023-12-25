@@ -11,7 +11,7 @@
       "path": "./apps/backend"
     },
     {
-      "path": "./apps/playground"
+      "path": "./apps/frontend"
     }
   ],
   "files": []
