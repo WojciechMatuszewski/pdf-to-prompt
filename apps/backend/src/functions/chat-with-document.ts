@@ -108,9 +108,6 @@ export const handler = middy<APIGatewayProxyEvent>()
         })
       );
 
-      /**
-       * TODO: write about this
-       */
       if (!(readStream instanceof Readable)) {
         throw createError(500, "The response is not a readable", {
           expose: true,

@@ -90,9 +90,6 @@ export class PdfPromptStack extends cdk.Stack {
         compatibleRuntimes: [cdk.aws_lambda.Runtime.NODEJS_LATEST],
       }
     );
-    /**
-     * TODO: not possible to have onSuccess here since this function is invoked by DynamoDB
-     */
     const generateEmbeddingsFunction = new cdk.aws_lambda_nodejs.NodejsFunction(
       this,
       "GenerateEmbeddings",

@@ -141,3 +141,17 @@ WIP
   **Printing the `stack` caused the weird runtime error to show up**. I wonder if this is some kind of security mechanism?
 
 - I just spent a couple of hours debugging issue with `faiss-node` AWS Lambda Layer only to discover I used the layer for wrong architecture...
+
+- When getting an object from S3, the SDK returns `StreamingBlobPayloadOutputTypes`. This in turns exposes methods allowing you to create either a buffer, string or a _web stream_ from the body.
+
+  - I found it very hard to pipe the _web stream_ into `fs.createWriteStream`. It seems like the types are not compatible.
+
+  - Also, examples in the internet are using the `reader` of the _web stream_. This means they are reading chunks separately rather than piping it to writable.
+
+- I got hit again by the "limitations" of AWS Lambda Destinations.
+
+  - Sadly, the `onSuccess` will not be invoked whenever the AWS Lambda is invoked by DynamoDB streams.
+
+    - It does make sense, given the fact that such AWS Lambda is invoked synchronously.
+
+    - Having said that, it would be awesome for AWS Lambda Destinations to work for sync invokes as well.
