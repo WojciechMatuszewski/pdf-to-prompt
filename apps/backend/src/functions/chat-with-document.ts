@@ -92,38 +92,11 @@ export const handler = middy<APIGatewayProxyEvent>()
     const { prompt } = parseBodyResult.output;
     const { id } = parsePathParametersResult.output;
 
-    const vectorStoreObjectKeys = [
-      `${id}/vector/docstore.json`,
-      `${id}/vector/faiss.index`,
-    ];
+    const vectorStore = await getVectorStore(id);
 
-    const outputDirPath = `/tmp/${id}`;
-    await fs.ensureDir(outputDirPath);
-
-    for (const vectorStoreObjectKey of vectorStoreObjectKeys) {
-      const { Body: readStream } = await s3Client.send(
-        new GetObjectCommand({
-          Bucket: process.env.PDF_BUCKET_NAME,
-          Key: vectorStoreObjectKey,
-        })
-      );
-
-      if (!(readStream instanceof Readable)) {
-        throw createError(500, "The response is not a readable", {
-          expose: true,
-          cause: vectorStoreObjectKey,
-        });
-      }
-
-      const writeStream = fs.createWriteStream(
-        path.join(outputDirPath, path.basename(vectorStoreObjectKey))
-      );
-
-      await pipeline(readStream, writeStream);
-    }
-
-    const vectorStore = await FaissStore.load(outputDirPath, embeddings);
-
+    /**
+     * This is not optimal since we are putting the whole document into the context.
+     */
     const template = `Assistant:You are given text. Answer the question solely based on the text provided. Be very brief. If you do not know something, feel free to reply with "I do not know".\n\n\\{context}\n\nHuman:{question}\n\nAssistant:`;
 
     const chain = RetrievalQAChain.fromLLM(model, vectorStore.asRetriever(), {
@@ -141,3 +114,47 @@ export const handler = middy<APIGatewayProxyEvent>()
       },
     };
   });
+
+const vectorStores = new Map<string, FaissStore>();
+
+async function getVectorStore(id: string) {
+  const existingStore = vectorStores.get(id);
+  if (existingStore) {
+    return existingStore;
+  }
+
+  const vectorStoreObjectKeys = [
+    `${id}/vector/docstore.json`,
+    `${id}/vector/faiss.index`,
+  ];
+
+  const outputDirPath = `/tmp/${id}`;
+  await fs.ensureDir(outputDirPath);
+
+  for (const vectorStoreObjectKey of vectorStoreObjectKeys) {
+    const { Body: readStream } = await s3Client.send(
+      new GetObjectCommand({
+        Bucket: process.env.PDF_BUCKET_NAME,
+        Key: vectorStoreObjectKey,
+      })
+    );
+
+    if (!(readStream instanceof Readable)) {
+      throw createError(500, "The response is not a readable", {
+        expose: true,
+        cause: vectorStoreObjectKey,
+      });
+    }
+
+    const writeStream = fs.createWriteStream(
+      path.join(outputDirPath, path.basename(vectorStoreObjectKey))
+    );
+
+    await pipeline(readStream, writeStream);
+  }
+
+  const vectorStore = await FaissStore.load(outputDirPath, embeddings);
+
+  vectorStores.set(id, vectorStore);
+  return vectorStore;
+}

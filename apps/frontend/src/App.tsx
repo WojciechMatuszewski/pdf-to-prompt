@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { File, Upload } from "lucide-react";
 import { useLayoutEffect, useState } from "react";
 import {
@@ -11,29 +11,27 @@ import {
 } from "react-aria-components";
 import { object, parse, record, string } from "valibot";
 
-interface UploadedItem {
+interface Document {
   file: File;
   id: string;
 }
 
 export function App() {
-  const [locallyUploadedItems, setLocallyUploadedItems] = useState<
-    UploadedItem[]
-  >([]);
+  const [documents, setDocuments] = useState<Document[]>([]);
 
   const handleOnSelect: FileTriggerProps["onSelect"] = (fileList) => {
     if (!fileList) {
       return;
     }
 
-    const newItems = Array.from(fileList).map((newFile) => {
+    const newDocuments = Array.from(fileList).map((newFile) => {
       return { file: newFile, id: crypto.randomUUID() };
     });
-    setLocallyUploadedItems([...locallyUploadedItems, ...newItems]);
+    setDocuments([...documents, ...newDocuments]);
   };
 
   const handleOnDrop: DropZoneProps["onDrop"] = ({ items }) => {
-    const validDroppedItems = items.filter((item): item is FileDropItem => {
+    const validDroppedDocuments = items.filter((item): item is FileDropItem => {
       if (item.kind !== "file") {
         return false;
       }
@@ -45,12 +43,12 @@ export function App() {
       return true;
     });
 
-    Promise.all(validDroppedItems.map((item) => item.getFile()))
+    Promise.all(validDroppedDocuments.map((item) => item.getFile()))
       .then((newFiles) => {
         const uploadedItems = newFiles.map((newFile) => {
           return { file: newFile, id: crypto.randomUUID() };
         });
-        setLocallyUploadedItems([...uploadedItems, ...uploadedItems]);
+        setDocuments([...uploadedItems, ...uploadedItems]);
       })
       .catch(console.error);
   };
@@ -58,101 +56,58 @@ export function App() {
   return (
     <article className={"m-auto max-w-lg py-16 flex flex-col gap-8"}>
       <h1 className={"text-3xl text-center"}>PDF to Prompt</h1>
-      <DropZone
-        onDrop={handleOnDrop}
-        className={
-          "h-64 bg-base-300 flex items-center justify-center rounded-md border-neutral border-2 data-[drop-target]:border-info"
-        }
-      >
-        <FileTrigger
-          allowsMultiple={false}
-          acceptedFileTypes={["application/pdf"]}
-          onSelect={handleOnSelect}
-        >
-          <Button
-            className={
-              "flex flex-col items-center gap-2 w-full h-full cursor-pointer justify-center"
-            }
-          >
-            <Upload />
-            <span
-              className={"uppercase font-semibold justify-center select-none"}
-            >
-              Select document
-            </span>
-          </Button>
-        </FileTrigger>
-      </DropZone>
+      <DocumentDropZone
+        handleOnDrop={handleOnDrop}
+        handleOnSelect={handleOnSelect}
+      />
       <section>
         <h2 className={"text-2xl"}>Uploaded documents</h2>
-        <FileList locallyUploadedItems={locallyUploadedItems} />
+        <DocumentsList documents={documents} />
       </section>
     </article>
   );
 }
 
-const FileList = ({
-  locallyUploadedItems,
-}: {
-  locallyUploadedItems: UploadedItem[];
-}) => {
+interface DocumentsListProps {
+  documents: Document[];
+}
+
+const DocumentsList = ({ documents }: DocumentsListProps) => {
   return (
-    <>
-      <ul className={"flex flex-col gap-4 mt-4"}>
-        {locallyUploadedItems.map((uploadedItem) => {
-          return (
-            <LocalFileItem uploadedItem={uploadedItem} key={uploadedItem.id} />
-          );
-        })}
-      </ul>
-      <ul></ul>
-    </>
+    <ul className={"flex flex-col gap-4 mt-4"}>
+      {documents.map((document) => {
+        return <LocalFileItem document={document} key={document.id} />;
+      })}
+    </ul>
   );
 };
 
-const uploadedItems = new Set<string>();
+interface LocalFileItemProps {
+  document: Document;
+}
 
-const LocalFileItem = ({ uploadedItem }: { uploadedItem: UploadedItem }) => {
-  const {
-    mutateAsync: uploadItem,
-    isPending,
-    error,
-    data,
-    status,
-  } = useUploadFile();
-  console.log({ isPending, error, data, status });
+const LocalFileItem = ({ document }: LocalFileItemProps) => {
+  const { mutateAsync: uploadItem, isPending } = useUploadDocument();
 
-  /**
-   * This hook uploads the file twice. (due to strict mode).
-   * How to make it work with correct dependency array, but make sure it is not uploaded twice?
-   * Deduplication?
-   */
   useLayoutEffect(() => {
-    /**
-     * Adding the code to prevent this being invoked twice breaks the `isPending` status.
-     * Interesting...
-     */
-    if (uploadedItems.has(uploadedItem.id)) {
-      return;
-    }
-
-    console.log("uploading!");
-    void uploadItem(uploadedItem.file).then(() => {
-      console.log("mutation resolved");
-    });
-    uploadedItems.add(uploadedItem.id);
-  }, [uploadItem, uploadedItem.file, uploadedItem.id]);
+    void uploadItem(document);
+  }, [uploadItem, document]);
 
   return (
-    <li className={"p-4 bg-base-300 rounded-md border-2 border-neutral"}>
+    <a
+      data-loading={isPending}
+      className={
+        "p-4 bg-base-300 rounded-md border-2 border-neutral data-[loading='true']:opacity-50"
+      }
+    >
       <div className={"flex flex-row gap-2"}>
         <File />
-        <span className={"italic"}>{uploadedItem.file.name}</span>
+        <span className={"italic"}>{document.file.name}</span>
         {isPending ? (
           <span className={"ml-auto loading loading-dots loading-sm"}></span>
         ) : null}
       </div>
-    </li>
+    </a>
   );
 };
 
@@ -161,9 +116,22 @@ const GetUploadUrlResponse = object({
   fields: record(string()),
 });
 
-const useUploadFile = () => {
+/**
+ * So that we do not upload the same item twice in development.
+ */
+const uploadedDocuments = new Set<string>();
+
+const useUploadDocument = () => {
   return useMutation({
-    mutationFn: async (file: File) => {
+    onSuccess: ({ id }) => {
+      uploadedDocuments.add(id);
+    },
+    mutationFn: async (document: Document) => {
+      const { file, id } = document;
+      if (uploadedDocuments.has(id)) {
+        return { id };
+      }
+
       const url = new URL("generate-upload-link", import.meta.env.VITE_API_URL);
       const presignedUrlResponse = await fetch(url.toString(), {
         method: "POST",
@@ -179,7 +147,6 @@ const useUploadFile = () => {
         GetUploadUrlResponse,
         await presignedUrlResponse.json()
       );
-      console.log("Payload okay");
 
       const formData = new FormData();
       Object.entries(presignedUrlPayload.fields).forEach(([field, value]) => {
@@ -195,9 +162,42 @@ const useUploadFile = () => {
         throw new Error(await uploadResponse.text());
       }
 
-      console.log(uploadResponse);
-
-      return {};
+      return { id };
     },
   });
 };
+
+interface FileDropZoneProps {
+  handleOnDrop: NonNullable<DropZoneProps["onDrop"]>;
+  handleOnSelect: NonNullable<FileTriggerProps["onSelect"]>;
+}
+
+function DocumentDropZone({ handleOnDrop, handleOnSelect }: FileDropZoneProps) {
+  return (
+    <DropZone
+      onDrop={handleOnDrop}
+      className={
+        "h-64 bg-base-300 flex items-center justify-center rounded-md border-neutral border-2 data-[drop-target]:border-info"
+      }
+    >
+      <FileTrigger
+        allowsMultiple={false}
+        acceptedFileTypes={["application/pdf"]}
+        onSelect={handleOnSelect}
+      >
+        <Button
+          className={
+            "flex flex-col items-center gap-2 w-full h-full cursor-pointer justify-center"
+          }
+        >
+          <Upload />
+          <span
+            className={"uppercase font-semibold justify-center select-none"}
+          >
+            Select document
+          </span>
+        </Button>
+      </FileTrigger>
+    </DropZone>
+  );
+}

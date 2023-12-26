@@ -2,7 +2,19 @@
 
 Implementing [this architecture](https://aws.amazon.com/blogs/compute/building-a-serverless-document-chat-with-aws-lambda-and-amazon-bedrock/) and learning about AI in the process.
 
-WIP
+I did not finish the frontend as I got what I wanted from this exercise.
+
+## Running the backend
+
+1. Download the `faiss-node` release packaged for [AWS from here](https://github.com/ewfian/faiss-node/releases).
+
+   - Look for the x86 architecture.
+
+2. Put the `nodejs` folder from the package into `layers/faiss-node`
+
+3. Bootstrap the backend.
+
+4. Deploy the backend.
 
 ## Learnings
 
@@ -155,3 +167,27 @@ WIP
     - It does make sense, given the fact that such AWS Lambda is invoked synchronously.
 
     - Having said that, it would be awesome for AWS Lambda Destinations to work for sync invokes as well.
+
+- **If you need to conditionally apply TailwindCSS styles**, consider the following approaches.
+
+  1. Use some kind of library to apply them conditionally. One such example is the [`cslx` package](https://github.com/lukeed/clsx)
+
+  2. **Use the `data-` attributes** and style based on them.
+
+  ```jsx
+  <li data-loading={isPending} className={"[loading='true']:opacity-50"}></li>
+  ```
+
+- I was trying to add the upload indicator for the document. The `reader` would always yield `{done: true, value: undefined}` and I could not figure out why is that the case.
+
+  - **S3 was not returning anything, as such there was nothing to "download" back from the server**.
+
+    - Looking back, it makes sense.
+
+  - According to my research, it is not possible to track the "upload" progress indicator if your body is not `ReadableStream`.
+
+    - I could not find any way to read the upload progress out of the `formData`.
+
+  - **Axios has the "upload progress" feature, but it uses XHR requests rather than `fetch` API**. The XHR request have `addEventListener` API where you can listen to upload requests.
+
+    - [Here is the implementation in Axios](https://github.com/axios/axios/blob/8befb86efb101ef9dc1d1c16d77d2bf42600727f/lib/adapters/xhr.js#L228)
